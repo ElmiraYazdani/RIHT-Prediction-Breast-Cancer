@@ -1,0 +1,94 @@
+# Central configuration for the RIHT nested-CV pipeline.
+# Every value here is read by thyroid_rihp.config.load_config(); nothing is hard-coded elsewhere.
+
+paths:
+  data_dir: data
+  output_dir: outputs
+
+data:
+  id_col: ID
+  label_col: group
+  # Columns that hold patient names. They are used ONLY for a cross-file consistency
+  # check inside data.py, are never stored in the feature matrix, and never written out.
+  name_cols: ["Unnamed: 0", "Patient name"]
+  files:
+    CB:  {file: CB_Thyroid.xlsx,         sheet: 0, label_in_file: true}
+    DVH: {file: DVH_Thyroid.xlsx,        sheet: 0, label_in_file: true}
+    RF:  {file: Radiomics_Thyroid.xlsx,  sheet: 0, label_in_file: true}
+    DF:  {file: Dosiomics_Thyroid.xlsx,  sheet: 0, label_in_file: true}
+  group_labels:   # names used in the manuscript
+    CB: "CBs"
+    DVH: "DVH"
+    RF: "CT RFs"
+    DF: "DFs"
+  # Thyroid volume used by the volume-dependence filter (a column of the CB file).
+  volume_source: {group: CB, column: VOLCTCM3}
+  # Substrings that mark post-outcome / identifier columns. Matching columns are never allowed
+  # in the feature matrix (data.assert_no_forbidden_features raises).
+  forbidden_patterns: ["tsh_follow", "tsh_1y", "tsh_post", "followup", "follow_up", "outcome", "label", "group", "unnamed", "patient", "name"]
+  # Allowed exact column names even though they could match a forbidden pattern above.
+  forbidden_exempt: []
+
+cv:
+  seed: 111
+  outer_folds: 4          # as in the manuscript
+  inner_folds: 3          # as in the manuscript
+  outer_repeats: 3        # repeated stratified CV: reduces split-to-split variance (new)
+  # Used only when a patient appears in >1 row (not the case in the present data: 1 row/patient).
+  group_aware_if_duplicate_ids: true
+
+feature_selection:
+  zero_variance_std: 1.0e-10
+  volume_filter:
+    enabled: true
+    groups: [RF, DF]       # manuscript: radiomic and dosiomic features
+    abs_spearman_max: 0.50
+  redundancy:
+    enabled: true
+    abs_pearson_max: 0.60
+    scope: group           # "group" (within each feature group) or "global"
+  mrmr:
+    enabled: true
+    k_per_group: {CB: 5, DVH: 4, RF: 6, DF: 6}
+    mi_neighbors: 3
+  stability:
+    enabled: true
+    n_iterations: 500      # manuscript: 2000 (see reports/AUDIT_REPORT.md for the compute trade-off)
+    subsample_ratio: 0.60
+    threshold: 0.75
+    coef_threshold: 1.0e-3
+    l1_ratios: [0.60, 0.70, 0.80, 0.90, 0.95]
+    Cs: [0.001, 0.01, 0.05, 0.1, 0.5]
+    fallback_step: 0.01
+    fallback_min_threshold: 0.55
+    min_features: 2
+    max_features: 5        # parsimony cap (new): ~27 events -> keep <= 5 predictors
+
+models:
+  main: [logreg_l2, logreg_enet, svm_linear, random_forest]
+  extended: [svm_rbf, extra_trees, gradient_boosting, adaboost, knn, naive_bayes, xgboost, lightgbm]
+  strategies: [none, class_weight, smote]
+  # Pre-specified BEFORE seeing results; used for the headline feature-group comparison so that
+  # no model/strategy is picked by looking at outer-fold performance.
+  primary_model: logreg_l2
+  primary_strategy: class_weight
+
+optuna:
+  n_trials: 30
+  objective: roc_auc       # inner-CV objective: roc_auc | neg_brier
+  sampler_seed_offset: 7
+
+threshold:
+  method: youden_inner     # chosen ONLY from inner-CV out-of-fold predictions of the outer-training set
+  fixed: 0.5               # also reported as a secondary operating point
+
+evaluation:
+  bootstrap_n: 1000
+  bootstrap_seed: 2024
+  ci_level: 0.95
+  dca_thresholds: [0.01, 0.80, 80]   # start, stop, number of points
+  calibration_bins: 5
+
+runtime:
+  n_jobs: 12
+  cache: true
