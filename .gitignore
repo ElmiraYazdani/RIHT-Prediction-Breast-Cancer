@@ -1,0 +1,27 @@
+# --- confidential / patient-level data: NEVER commit ---
+data/
+*.xlsx
+*.xls
+*.csv.gz
+outputs/predictions/
+outputs/cache/
+outputs/**/oof_predictions*.csv
+outputs/final_model/
+*.joblib
+*.pkl
+
+# --- environments / caches ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.DS_Store
+Thumbs.db
+
+# --- unpublished manuscript kept locally only ---
+Manuscript.docx
+Manuscript_*.docx
+outputs/*/cache/
